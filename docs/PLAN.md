@@ -1,5 +1,8 @@
 # ShellShock Academy — Implementation Plan
 
+> Written before implementation. Where the code differs, the README is authoritative
+> (for example `&&`/`||`, `find -exec` and `2>` were built in v1 rather than deferred).
+
 Browser puzzle game: simulated Linux shell over a virtual filesystem, teaching defensive security.
 Stack: TypeScript (strict), Vite, xterm.js (`@xterm/xterm` + `@xterm/addon-fit`), Vitest. No backend; progress in localStorage.
 
@@ -179,7 +182,7 @@ interface Level {
 | 4 | Over-permissive private key | `~/.ssh/id_ed25519` mode `600`, owned by analyst | `chmod 600 …` | `chmod go-rwx …` / `chmod u=rw,go= …` |
 | 5 | Suspicious listener | Kill only the rogue process on port 4444 (sshd/nginx must survive) | `ss -tlnp` → `kill <pid>` | `ps aux \| grep -v …` / `cat /proc/<pid>/cmdline` → `sudo kill -9 <pid>` |
 | 6 | Integrity check | `submit` the tampered binary's path | `sha256sum -c /opt/manifest/SHA256SUMS \| grep FAILED` | `sha256sum /usr/local/bin/*` and compare to manifest with `grep`/`sort` |
-| 7 | Cron persistence | Remove the malicious cron entry; legitimate jobs stay | `sudo rm /etc/cron.d/sysupdate` | `grep -v curl /etc/crontab > /tmp/c; sudo cp /tmp/c /etc/crontab` (variant data puts payload there) — final decision: payload lives in `/etc/cron.d/`, legit entries in same dir, B = `grep -rl` to locate then `sudo rm` vs `sudo mv` to quarantine |
+| 7 | Cron persistence | Remove the malicious cron entry; legitimate jobs stay | `grep -r curl /etc/cron.d /etc/crontab` → `sudo rm /etc/cron.d/system-update` | `ls -lt /etc/cron.d` or `find /etc -type f -mtime -3` → `sudo mv` it to a quarantine directory |
 | 8 | Base64 config | `submit` the C2 domain hidden in a base64 field | `grep c2 conf \| cut -d= -f2 \| base64 -d` | `echo '<blob>' \| base64 -d` |
 
 Fail states: L5 killing sshd/nginx; L7 deleting legit cron files; L4 `chmod 000` (key unusable) — each shows why and offers `reset`.
