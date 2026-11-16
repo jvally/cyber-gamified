@@ -23,12 +23,30 @@ export interface ConceptCard {
   commands: { cmd: string; explain: string }[];
 }
 
-export interface Level {
+export interface Completion { line: string; cursor: number; candidates: string[] }
+
+/** What every level has, whichever module it belongs to. */
+export interface LevelMeta {
   id: string;
+  /** which simulated environment the level runs in */
+  module: 'linux' | 'ad';
   title: string;
   story: string;
   /** the single goal, in one sentence */
   objective: string;
+  hints: [string, string, string];
+  conceptCard: ConceptCard;
+  /** one line of intel revealed on completion: the lead that points to the next task */
+  intel: string;
+  idealSolution: string[];
+  /** other valid ways to solve the level; at least one is required */
+  altSolutions: string[][];
+  /** plausible-but-wrong command sequences that must NOT complete the level */
+  wrongSolutions?: string[][];
+}
+
+export interface Level extends LevelMeta {
+  module: 'linux';
   /** seconds since the epoch; the level's frozen clock */
   now: number;
   user?: string;
@@ -39,11 +57,4 @@ export interface Level {
   goalCheck(state: GameState): boolean;
   /** returns a message when the player has broken something beyond the scope of the goal */
   failCheck?(state: GameState): string | null;
-  hints: [string, string, string];
-  conceptCard: ConceptCard;
-  idealSolution: string[];
-  /** other valid ways to solve the level; at least one is required */
-  altSolutions: string[][];
-  /** plausible-but-wrong command sequences that must NOT complete the level */
-  wrongSolutions?: string[][];
 }

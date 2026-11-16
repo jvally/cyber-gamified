@@ -42,6 +42,7 @@ function persistenceRemains(s: GameState): boolean {
 
 export const cronPersistence: Level = {
   id: 'cron-persistence',
+  module: 'linux',
   title: 'It Keeps Coming Back',
   story: text(`
     The backdoor you killed keeps restarting. Something relaunches it on a timer.
@@ -91,6 +92,7 @@ export const cronPersistence: Level = {
       { cmd: 'sudo rm /etc/cron.d/system-update', explain: 'cron files are root-owned, so removal needs sudo' },
     ],
   },
+  intel: 'cron is clean. One odd process remains: /opt/telemetry/agent.',
   idealSolution: ['grep -r curl /etc/cron.d /etc/crontab', `sudo rm ${PLANTED}`],
   altSolutions: [
     ['ls -lt /etc/cron.d', `cat ${PLANTED}`, 'sudo mkdir /root/quarantine', `sudo mv ${PLANTED} /root/quarantine/`],

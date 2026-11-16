@@ -9,6 +9,7 @@ export interface GameHooks {
   levels?(): string;
   reset?(): string;
   next?(): string;
+  exit?(): string;
 }
 
 export interface GameState {

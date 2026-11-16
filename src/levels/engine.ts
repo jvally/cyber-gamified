@@ -1,25 +1,14 @@
-// Level engine: builds a fresh simulated machine for a level, runs commands, and tracks win/fail/score.
-import { Shell, RunOpts } from '../shell/shell';
+// Linux module session: a level's simulated machine plus the bash-like shell.
+import { Shell } from '../shell/shell';
 import type { GameHooks, GameState } from '../shell/state';
+import { complete } from '../ui/completion';
 import { buildState } from './builders';
-import type { Level } from './types';
+import { ExecResult, RunOptions, Session } from './session';
+import type { Completion, Level, LevelMeta } from './types';
+import { AdGame } from '../ad/session';
+import type { AdLevel } from '../ad/types';
 
-export const BASE_SCORE = 100;
-export const HINT_COSTS = [10, 20, 30] as const;
-export const PAR_BONUS = 10;
-export const MIN_SCORE = 10;
-/** Commands that never count towards the command total. */
-const META = new Set(['help', 'man', 'hint', 'mission', 'levels', 'clear', 'history', 'reset', 'next']);
-
-export type Status = 'playing' | 'won' | 'failed';
-export interface ExecResult {
-  output: string;
-  code: number;
-  status: Status;
-  justWon: boolean;
-  justFailed: boolean;
-  wrongAnswer: boolean;
-}
+export * from './session';
 
 export const buildLevelState = (level: Level): GameState => buildState({
   now: level.now, files: level.initialFS, procs: level.initialProcesses,
@@ -27,79 +16,48 @@ export const buildLevelState = (level: Level): GameState => buildState({
 });
 
 /** The most recent `submit` answer, trimmed. */
-export const lastAnswer = (state: GameState): string | undefined => state.submitted[state.submitted.length - 1]?.trim();
+export const lastAnswer = (state: { submitted: string[] }): string | undefined =>
+  state.submitted[state.submitted.length - 1]?.trim();
 
-export class Game {
-  state!: GameState;
-  shell!: Shell;
-  status: Status = 'playing';
-  failMessage: string | null = null;
-  hintsUsed = 0;
-  commandCount = 0;
-  commands: string[] = [];
+export class Game extends Session<Level> {
+  declare state: GameState;
+  declare shell: Shell;
 
-  constructor(public level: Level, private hooks: GameHooks = {}) {
+  constructor(level: Level, hooks: GameHooks = {}) {
+    super(level, hooks);
     this.reset();
   }
 
-  reset(): void {
+  protected build(): void {
     this.state = buildLevelState(this.level);
     this.state.game = this.hooks;
     this.shell = new Shell(this.state);
-    this.status = 'playing';
-    this.failMessage = null;
-    this.hintsUsed = 0;
-    this.commandCount = 0;
-    this.commands = [];
   }
+  protected runLine(line: string, opts: RunOptions): { output: string; code: number } { return this.shell.run(line, opts); }
+  protected goalMet(): boolean { return this.level.goalCheck(this.state); }
+  protected failure(): string | null { return this.level.failCheck?.(this.state) ?? null; }
+  protected submissionCount(): number { return this.state.submitted.length; }
 
-  /** Commands allowed for the par bonus. */
-  get par(): number { return this.level.idealSolution.length + 2; }
-
-  score(): number {
-    const hints = HINT_COSTS.slice(0, this.hintsUsed).reduce((a, b) => a + b, 0);
-    const bonus = this.commandCount <= this.par ? PAR_BONUS : 0;
-    return Math.max(MIN_SCORE, BASE_SCORE - hints + bonus);
+  prompt(): { text: string; length: number } {
+    const { state } = this;
+    const home = state.env.HOME;
+    const cwd = state.cwd === home ? '~' : state.cwd.startsWith(home + '/') ? '~' + state.cwd.slice(home.length) : state.cwd;
+    return {
+      text: `\x1b[1;32m${state.user}@${state.hostname}\x1b[0m:\x1b[1;34m${cwd}\x1b[0m$ `,
+      length: `${state.user}@${state.hostname}:${cwd}$ `.length,
+    };
   }
-
-  /** Reveal the next hint tier, or null when all three are used. */
-  nextHint(): { tier: number; text: string; cost: number } | null {
-    if (this.hintsUsed >= this.level.hints.length) return null;
-    const tier = this.hintsUsed++;
-    return { tier: tier + 1, text: this.level.hints[tier], cost: HINT_COSTS[tier] };
-  }
-
-  exec(line: string, opts: RunOpts = {}): ExecResult {
-    const first = line.trim().split(/\s+/)[0] ?? '';
-    const meta = META.has(first);
-    const base = { justWon: false, justFailed: false, wrongAnswer: false };
-    if (line.trim() === '') return { output: '', code: 0, status: this.status, ...base };
-    if (this.status === 'failed' && !meta) {
-      return { output: 'Level is in a failed state. Type `reset`.\n', code: 1, status: this.status, ...base };
-    }
-    const before = this.state.submitted.length;
-    const res = this.shell.run(line, opts);
-    if (!meta) { this.commandCount++; this.commands.push(line.trim()); }
-    const out: ExecResult = { output: res.output, code: res.code, status: this.status, ...base };
-    if (this.status !== 'playing') return out;
-    const fail = this.level.failCheck?.(this.state) ?? null;
-    if (fail) {
-      this.status = out.status = 'failed';
-      this.failMessage = fail;
-      out.justFailed = true;
-    } else if (this.level.goalCheck(this.state)) {
-      this.status = out.status = 'won';
-      out.justWon = true;
-    } else if (this.state.submitted.length > before) {
-      out.wrongAnswer = true;
-    }
-    return out;
-  }
+  complete(line: string, cursor: number): Completion { return complete(line, cursor, this.state, this.shell.commands); }
 }
 
-/** Run a list of commands through a fresh game. Used by tests and by replay. */
-export function runSolution(level: Level, commands: string[]): { game: Game; results: ExecResult[] } {
-  const game = new Game(level);
+/** Create the right kind of session for a level. */
+export function createSession(level: LevelMeta, hooks: GameHooks = {}): Session {
+  return level.module === 'ad' ? new AdGame(level as AdLevel, hooks) : new Game(level as Level, hooks);
+}
+
+/** Run a list of commands through a fresh session. Used by tests. */
+export function runSolution<L extends LevelMeta>(level: L, commands: string[]): { game: L extends Level ? Game : Session; results: ExecResult[] } {
+  const game = createSession(level);
   const results = commands.map((c) => game.exec(c));
-  return { game, results };
+  return { game: game as L extends Level ? Game : Session, results };
 }

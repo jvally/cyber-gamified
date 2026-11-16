@@ -17,6 +17,7 @@ export const FAILED_COUNT = LOG.failed;
 
 export const failedLogins: Level = {
   id: 'failed-logins',
+  module: 'linux',
   title: 'Knocking at the Door',
   story: text(`
     web01 exposes SSH to the internet and overnight alerts spiked.
@@ -58,6 +59,7 @@ export const failedLogins: Level = {
       { cmd: 'grep -c "Failed password" /var/log/auth.log', explain: 'grep counts matching lines itself' },
     ],
   },
+  intel: 'That many failures is an attack, not typos. Find the address behind most of them.',
   idealSolution: ['grep -c "Failed password" /var/log/auth.log', `submit ${FAILED_COUNT}`],
   altSolutions: [
     ['grep "Failed password" /var/log/auth.log | wc -l', `submit ${FAILED_COUNT}`],

@@ -24,6 +24,7 @@ const IP_RE = '([0-9]{1,3}\\.){3}[0-9]{1,3}';
 
 export const topAttacker: Level = {
   id: 'top-attacker',
+  module: 'linux',
   title: 'Who Is Knocking Loudest?',
   story: text(`
     The firewall team can block one address now: the source of the most failed password attempts.
@@ -63,6 +64,7 @@ export const topAttacker: Level = {
       { cmd: 'sort -rn | head -n 3', explain: 'numeric sort, largest first, top three' },
     ],
   },
+  intel: 'That address later logged in with a key copied from this host. Check the permissions on SSH keys.',
   idealSolution: [
     `grep "Failed password" /var/log/auth.log | grep -oE "${IP_RE}" | sort | uniq -c | sort -rn | head -n 3`,
     `submit ${TOP_IP}`,

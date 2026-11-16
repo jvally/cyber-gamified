@@ -7,6 +7,7 @@ const KEY = '/home/analyst/.ssh/id_ed25519';
 
 export const privateKey: Level = {
   id: 'private-key',
+  module: 'linux',
   title: 'Too Many Eyes on the Key',
   story: text(`
     SSH refuses your key for db01. The error is in ~/ssh-error.txt.
@@ -71,6 +72,7 @@ export const privateKey: Level = {
       { cmd: 'chmod go-rwx ~/.ssh/id_ed25519', explain: 'symbolic: remove all access from group and others' },
     ],
   },
+  intel: 'Someone has been on this box. Check what is listening on the network.',
   idealSolution: ['ls -l ~/.ssh', 'chmod 600 ~/.ssh/id_ed25519'],
   altSolutions: [
     ['chmod go-rwx ~/.ssh/id_ed25519'],

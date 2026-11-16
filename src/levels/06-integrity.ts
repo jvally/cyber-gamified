@@ -54,6 +54,7 @@ const mtimes: Record<string, number> = {
 
 export const integrity: Level = {
   id: 'integrity',
+  module: 'linux',
   title: 'Trust, but Verify',
   story: text(`
     Scripts in /usr/local/bin run as root from cron. One changed line there runs with full privileges.
@@ -100,6 +101,7 @@ export const integrity: Level = {
       { cmd: 'cat now.txt baseline.txt | sort | uniq -u', explain: 'lines that appear once are the ones that differ' },
     ],
   },
+  intel: 'healthcheck.sh was modified, and the backdoor is running again. Look for a timer that restarts it.',
   idealSolution: ['sha256sum -c /opt/baseline/SHA256SUMS', `submit ${TAMPERED}`],
   altSolutions: [
     [

@@ -1,7 +1,7 @@
 // Game-layer commands. They are not Unix tools; they talk to the level engine.
 import { Command, Ctx, Help } from './types';
 
-export const GAME_COMMANDS = ['submit', 'help', 'man', 'hint', 'mission', 'levels', 'reset', 'next'];
+export const GAME_COMMANDS = ['submit', 'help', 'man', 'hint', 'mission', 'levels', 'reset', 'next', 'exit'];
 
 export function formatHelp(name: string, h: Help): string {
   let out = `\x1b[1m${name}\x1b[0m - ${h.summary}\n\n\x1b[1mUsage:\x1b[0m ${h.usage}\n`;
@@ -37,7 +37,7 @@ function helpCmd(ctx: Ctx): number {
   return 0;
 }
 
-const hook = (name: 'hint' | 'mission' | 'levels' | 'reset' | 'next', summary: string): Command => ({
+const hook = (name: 'hint' | 'mission' | 'levels' | 'reset' | 'next' | 'exit', summary: string): Command => ({
   run(ctx) {
     const fn = ctx.state.game?.[name];
     if (!fn) { ctx.err(`${name}: only available inside the game\n`); return 1; }
@@ -65,4 +65,5 @@ export const game: Record<string, Command> = {
   levels: hook('levels', 'list levels and your progress'),
   reset: hook('reset', 'restart the current level from its initial state'),
   next: hook('next', 'go to the next level (once this one is complete)'),
+  exit: hook('exit', 'leave this terminal and return to the map'),
 };

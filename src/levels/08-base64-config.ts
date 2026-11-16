@@ -15,6 +15,7 @@ const hostOf = (answer: string): string => answer.toLowerCase().replace(/^[a-z]+
 
 export const base64Config: Level = {
   id: 'base64-config',
+  module: 'linux',
   title: 'Hidden in Plain Sight',
   story: text(`
     web01 makes an outbound HTTPS request every five minutes.
@@ -68,6 +69,7 @@ export const base64Config: Level = {
       { cmd: `echo ${ENDPOINT_B64} | base64 -d`, explain: 'quick way for a value you can paste' },
     ],
   },
+  intel: 'Command-and-control host identified and blocked. Server room secured.',
   idealSolution: [`cat ${CONF}`, `grep endpoint_b64 ${CONF} | cut -d= -f2- | base64 -d`, `submit ${HOST}`],
   altSolutions: [
     [`echo ${ENDPOINT_B64} | base64 -d`, `submit ${ENDPOINT}`],

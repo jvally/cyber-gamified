@@ -20,6 +20,7 @@ const PROTECTED = procs.filter((p) => p.pid !== ROGUE_PID);
 
 export const rogueListener: Level = {
   id: 'rogue-listener',
+  module: 'linux',
   title: 'An Unexpected Open Door',
   story: text(`
     A port scan of web01 shows one more open port than last week.
@@ -75,6 +76,7 @@ export const rogueListener: Level = {
       { cmd: 'sudo kill 3127', explain: 'SIGTERM to one PID; use -9 only if it ignores that' },
     ],
   },
+  intel: 'The backdoor ran from /var/tmp. Verify nothing else was changed: compare against the baseline hashes.',
   idealSolution: ['sudo ss -tlnp', `sudo kill ${ROGUE_PID}`],
   altSolutions: [
     ['cat baseline-ports.txt', 'ss -tln', 'ps aux | grep www-data', `cat /proc/${ROGUE_PID}/cmdline`, `sudo kill -9 ${ROGUE_PID}`],

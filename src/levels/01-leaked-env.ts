@@ -9,6 +9,7 @@ const KEY_ID = 'AKIAIOSFODNN7EXAMPLE';
 
 export const leakedEnv: Level = {
   id: 'leaked-env',
+  module: 'linux',
   title: 'The Leaked .env',
   story: text(`
     Ticket SEC-1042: a scanner got HTTP 200 for a dotfile on the shop site.
@@ -85,6 +86,7 @@ export const leakedEnv: Level = {
       { cmd: 'cat /var/www/shop/public/.env', explain: 'see exactly what was exposed' },
     ],
   },
+  intel: 'The leaked key was used from outside overnight. Check who has been trying to log in: /var/log/auth.log.',
   idealSolution: ['find /var/www -name ".env"', 'cat /var/www/shop/public/.env', `submit ${KEY_ID}`],
   altSolutions: [
     ['grep -r AWS_ACCESS_KEY_ID /var/www', `submit ${KEY_ID}`],

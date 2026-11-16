@@ -1,27 +1,54 @@
 import { describe, expect, it } from 'vitest';
-import { LEVELS } from '../src/levels/index';
-import { BASE_SCORE, Game, HINT_COSTS, MIN_SCORE, PAR_BONUS, runSolution } from '../src/levels/engine';
+import { ALL_LEVELS, AD_LEVELS, LEVELS, MODULES } from '../src/levels/index';
+import { BASE_SCORE, createSession, Game, HINT_COSTS, MIN_SCORE, PAR_BONUS, runSolution } from '../src/levels/engine';
+import type { LevelMeta } from '../src/levels/types';
 import { registry } from '../src/shell/commands/index';
 import { parse } from '../src/shell/parser';
+import { parse as parsePs } from '../src/ad/powershell';
+import { resolveCmdlet } from '../src/ad/cmdlets';
 import { FAILED_COUNT } from '../src/levels/02-failed-logins';
 import { NOISIEST_IP, TOP_IP } from '../src/levels/03-top-attacker';
 
-const allSolutions = (l: (typeof LEVELS)[number]): string[][] => [l.idealSolution, ...l.altSolutions];
+const allSolutions = (l: LevelMeta): string[][] => [l.idealSolution, ...l.altSolutions];
+
+/** Names of the commands a line would run, in the level's own shell syntax. */
+function commandNames(level: LevelMeta, line: string): string[] {
+  if (level.module === 'ad') return parsePs(line).flat().map((stage) => stage.name);
+  return parse(line).flatMap((item) => item.pipeline.commands.map((cmd) => {
+    const words = cmd.argv.map((w) => w.map((p) => p.text).join(''));
+    return words[0] === 'sudo' ? words[1] : words[0];
+  }));
+}
+const isKnown = (level: LevelMeta, name: string): boolean =>
+  (level.module === 'ad' ? resolveCmdlet(name) !== undefined : Object.hasOwn(registry, name));
+const HARMLESS: Record<LevelMeta['module'], string[]> = {
+  linux: ['ls -la', 'pwd', 'help', 'ps aux', 'cat /etc/passwd', 'history'],
+  ad: ['Get-ADUser -Filter *', 'help', 'Get-ADOrganizationalUnit -Filter *', 'Get-GPO -All', 'whoami', "Get-ADGroupMember 'Domain Admins'", 'Search-ADAccount -LockedOut'],
+};
+const BROKEN = /command not found|syntax error|not supported|is not recognized|cannot be found that matches|Missing/;
 
 describe('level catalogue', () => {
-  it('has the eight levels in the planned order with unique ids', () => {
+  it('has the eight Linux levels in the planned order', () => {
     expect(LEVELS.map((l) => l.id)).toEqual([
       'leaked-env', 'failed-logins', 'top-attacker', 'private-key', 'rogue-listener', 'integrity', 'cron-persistence', 'base64-config',
     ]);
   });
+  it('has the five Active Directory levels', () => {
+    expect(AD_LEVELS.map((l) => l.id)).toEqual(['ad-account-recovery', 'ad-domain-admins', 'ad-stale-account', 'ad-ou-structure', 'ad-gpo-link']);
+  });
+  it('ids are unique and every level belongs to its module', () => {
+    expect(new Set(ALL_LEVELS.map((l) => l.id)).size).toBe(ALL_LEVELS.length);
+    for (const m of MODULES) for (const l of m.levels) expect(l.module).toBe(m.id);
+  });
 });
 
-describe.each(LEVELS.map((l) => [l.id, l] as const))('level %s', (_id, level) => {
+describe.each(ALL_LEVELS.map((l) => [l.id, l] as const))('level %s', (_id, level) => {
   it('is structurally complete', () => {
-    for (const s of [level.title, level.story, level.objective]) expect(s.trim().length).toBeGreaterThan(10);
+    for (const s of [level.title, level.story, level.objective, level.intel]) expect(s.trim().length).toBeGreaterThan(10);
     // keep the copy short: these limits stop the text creeping back into paragraphs
     expect(level.story.length).toBeLessThanOrEqual(320);
     expect(level.objective.length).toBeLessThanOrEqual(110);
+    expect(level.intel.length).toBeLessThanOrEqual(130);
     level.hints.forEach((h) => expect(h.length).toBeLessThanOrEqual(190));
     expect(level.hints).toHaveLength(3);
     level.hints.forEach((h) => expect(h.length).toBeGreaterThan(20));
@@ -38,11 +65,11 @@ describe.each(LEVELS.map((l) => [l.id, l] as const))('level %s', (_id, level) =>
   });
 
   it('is not already solved (or failed) at the start', () => {
-    const g = new Game(level);
-    expect(level.goalCheck(g.state)).toBe(false);
-    expect(level.failCheck?.(g.state) ?? null).toBeNull();
-    for (const harmless of ['ls -la', 'pwd', 'help', 'ps aux', 'cat /etc/passwd', 'history']) {
-      expect(g.exec(harmless).status).toBe('playing');
+    const g = createSession(level);
+    for (const harmless of HARMLESS[level.module]) {
+      const r = g.exec(harmless);
+      expect(r.status, harmless).toBe('playing');
+      expect(r.code, harmless).toBe(0);
     }
   });
 
@@ -64,32 +91,17 @@ describe.each(LEVELS.map((l) => [l.id, l] as const))('level %s', (_id, level) =>
     expect(runSolution(level, cmds).game.status).not.toBe('won');
   });
 
-  it('solutions use only supported commands and valid syntax', () => {
-    const lines = [...allSolutions(level), ...(level.wrongSolutions ?? [])].flat();
-    for (const line of lines) {
-      for (const item of parse(line)) {
-        for (const cmd of item.pipeline.commands) {
-          const words = cmd.argv.map((w) => w.map((p) => p.text).join(''));
-          const name = words[0] === 'sudo' ? words[1] : words[0];
-          expect(Object.keys(registry), `${line}`).toContain(name);
-        }
-      }
-    }
+  it('solutions and concept-card commands use only supported commands and valid syntax', () => {
+    const lines = [...allSolutions(level), ...(level.wrongSolutions ?? [])].flat().concat(level.conceptCard.commands.map((c) => c.cmd));
+    for (const line of lines) for (const name of commandNames(level, line)) expect(isKnown(level, name), `${name} in: ${line}`).toBe(true);
   });
 
-  it('solution commands produce no "command not found" or syntax errors', () => {
+  it('solution commands run without errors', () => {
     for (const cmds of allSolutions(level)) {
-      for (const r of runSolution(level, cmds).results) expect(r.output).not.toMatch(/command not found|syntax error|not supported/);
-    }
-  });
-
-  it('concept-card commands are real commands', () => {
-    for (const { cmd } of level.conceptCard.commands) {
-      for (const item of parse(cmd)) {
-        for (const c of item.pipeline.commands) {
-          const words = c.argv.map((w) => w.map((p) => p.text).join(''));
-          expect(Object.keys(registry)).toContain(words[0] === 'sudo' ? words[1] : words[0]);
-        }
+      for (const r of runSolution(level, cmds).results) {
+        expect(r.output).not.toMatch(BROKEN);
+        // Unix tools legitimately exit non-zero (grep with no match, sha256sum -c on a mismatch); cmdlets should not fail
+        if (level.module === 'ad') expect(r.code).toBe(0);
       }
     }
   });
@@ -100,11 +112,11 @@ describe.each(LEVELS.map((l) => [l.id, l] as const))('level %s', (_id, level) =>
     const plain = /Run: (.*)$/.exec(hint)?.[1];
     const cmds = [...quoted, ...(plain ? [plain] : [])].filter((c) => {
       const w = c.split(' ');
-      return Object.hasOwn(registry, w[0] === 'sudo' ? w[1] ?? '' : w[0]);
+      return isKnown(level, w[0] === 'sudo' ? w[1] ?? '' : w[0]);
     });
     expect(cmds.length, 'tier-3 hints must name a concrete command').toBeGreaterThan(0);
     const { game, results } = runSolution(level, cmds);
-    for (const r of results) expect(r.output).not.toMatch(/command not found|syntax error|No such file/);
+    for (const r of results) expect(r.output).not.toMatch(/command not found|syntax error|No such file|is not recognized|Cannot find an object/);
     // levels solved by changing the machine (not by submitting an answer) are won by the hint alone
     if (!allSolutions(level).flat().some((c) => c.startsWith('submit'))) expect(game.status).toBe('won');
   });

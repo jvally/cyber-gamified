@@ -2,8 +2,9 @@
 import { normalize } from '../vfs/vfs';
 import type { GameState } from '../shell/state';
 import type { Command } from '../shell/commands/types';
+import type { Completion } from '../levels/types';
 
-export interface Completion { line: string; cursor: number; candidates: string[] }
+export type { Completion };
 
 const escape = (s: string): string => s.replace(/([ '"\\$*?()[\]|&;<>#!`])/g, '\\$1');
 const commonPrefix = (xs: string[]): string => {
