@@ -46,7 +46,7 @@ export class App {
     const termHost = h('div', { class: 'terminal', 'aria-label': 'Terminal' });
     root.append(
       h('header', { class: 'topbar' },
-        h('h1', {}, 'ShellShock Academy'),
+        h('h1', { 'aria-label': 'ShellShock Academy' }, h('span', { class: 'neon-cyan' }, 'ShellShock'), ' ', h('span', { class: 'neon-lime' }, 'Academy')),
         this.summary,
         h('button', { class: 'btn', click: () => this.showLevelSelect() }, 'Levels'),
       ),
@@ -56,7 +56,12 @@ export class App {
     this.term = new Terminal({
       convertEol: true, cursorBlink: true, fontSize: 14, scrollback: 5000,
       fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace',
-      theme: { background: '#0b0f14', foreground: '#d6deeb', cursor: '#7fdbca', selectionBackground: '#264f78' },
+      theme: {
+        background: '#0a0d1c', foreground: '#dbe4ff', cursor: '#9fef00', cursorAccent: '#0a0d1c', selectionBackground: '#3b2a6b',
+        black: '#141d2b', red: '#ff4d6d', green: '#9fef00', yellow: '#ffd447', blue: '#3aa8ff', magenta: '#ff2fd0', cyan: '#2ee6ff', white: '#dbe4ff',
+        brightBlack: '#6b7a9c', brightRed: '#ff7a90', brightGreen: '#b8ff3d', brightYellow: '#ffe27a', brightBlue: '#6cc4ff',
+        brightMagenta: '#ff6be0', brightCyan: '#7af2ff', brightWhite: '#ffffff',
+      },
     });
     this.term.loadAddon(this.fit);
     this.term.open(termHost);
