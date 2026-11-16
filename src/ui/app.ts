@@ -475,22 +475,25 @@ export class App {
           ));
       })),
     ]);
+    // Two clicks instead of window.confirm(), which is unavailable in sandboxed embeds.
+    let armed = false;
+    const resetBtn: HTMLButtonElement = h('button', {
+      class: 'btn danger',
+      click: () => {
+        if (!armed) { armed = true; resetBtn.textContent = 'Click again to erase everything'; return; }
+        this.store.reset();
+        this.closeModal();
+        if (this.mode === 'station') this.setMode('world');
+        this.refresh();
+      },
+    }, 'Reset all progress');
     this.openModal(
       h('h2', {}, 'Levels'),
       h('p', { class: 'muted' }, `${this.store.completedCount(ALL_IDS)}/${ALL_LEVELS.length} solved · ${this.store.totalScore(ALL_IDS)} pts · "Go" takes you straight to the terminal`),
       ...sections,
       h('div', { class: 'actions' },
         h('button', { class: 'btn', click: () => this.closeModal() }, 'Close'),
-        h('button', {
-          class: 'btn danger',
-          click: () => {
-            if (!window.confirm('Erase all progress and scores? This cannot be undone.')) return;
-            this.store.reset();
-            this.closeModal();
-            if (this.mode === 'station') this.setMode('world');
-            this.refresh();
-          },
-        }, 'Reset all progress'),
+        resetBtn,
       ),
     );
   }
