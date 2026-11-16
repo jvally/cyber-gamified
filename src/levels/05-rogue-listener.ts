@@ -22,14 +22,11 @@ export const rogueListener: Level = {
   id: 'rogue-listener',
   title: 'An Unexpected Open Door',
   story: text(`
-    A routine external port scan of web01 came back with one port more than last week.
-    Every open port is a program waiting for connections; an unexpected one usually means
-    something was installed that nobody approved, often a backdoor.
-
-    The approved listeners are documented in ~/baseline-ports.txt. Work out which process
-    owns the extra port and stop it. The site is live: do not take down the real services.
+    A port scan of web01 shows one more open port than last week.
+    Approved listeners are in ~/baseline-ports.txt. An unapproved one is often a backdoor.
+    The site is live: stop only the rogue process.
   `),
-  objective: 'Find the process listening on the port that is not in the baseline and terminate it, leaving every legitimate service running.',
+  objective: 'Terminate the process listening on the port missing from the baseline. Keep legitimate services running.',
   now: NOW,
   initialFS: [
     ...baseFiles(NOW),
@@ -50,22 +47,32 @@ export const rogueListener: Level = {
   goalCheck: (s) => !s.procs.procs.some((p) => p.listen.some((l) => l.port === ROGUE_PORT)),
   failCheck: (s) => {
     const dead = PROTECTED.find((p) => !s.procs.get(p.pid));
-    return dead ? `You killed ${commName(dead.cmd)} (PID ${dead.pid}), a legitimate service. On a production host that is an outage: identify the exact PID before sending a signal.` : null;
+    return dead ? `You killed ${commName(dead.cmd)} (PID ${dead.pid}), a legitimate service. Confirm the PID before sending a signal.` : null;
   },
   hints: [
-    'You need two facts: which ports are open, and which process owns each one. `ss` lists sockets; compare its output with ~/baseline-ports.txt.',
-    '`ss -tln` shows listening TCP ports. Add `-p` to see the owning process, but the kernel only reveals other users\' processes to root, so use `sudo ss -tlnp`. You can cross-check a PID with `ps aux` or `cat /proc/<pid>/cmdline`.',
-    'The extra port is 4444, owned by PID 3127. It belongs to another user, so stopping it needs root: `sudo kill 3127`.',
+    '`ss` lists sockets. Compare the listening ports with ~/baseline-ports.txt.',
+    '`ss -tln` shows listening TCP ports. `-p` adds the owning process but needs root for other users\' processes: `sudo ss -tlnp`.',
+    'Port 4444 belongs to PID 3127, owned by another user: `sudo kill 3127`.',
   ],
   conceptCard: {
-    attack: 'A backdoor listener (bind shell or implant). After getting code execution, here through the web application running as www-data, an attacker starts a program that listens on a port so they can come back later. It is often named to look like a kernel thread (kworker) and hidden in a dot-directory under a world-writable path such as /var/tmp.',
-    detection: 'Compare listening sockets against a known baseline: ss -tlnp (or netstat -tlnp) shows port, address and owning PID. Then inspect the process: its user, start time, parent and binary path. Red flags here: an unprivileged service account, started at 03:17, running from a hidden directory, bound to all interfaces. Real kernel threads appear in [brackets] and have no binary path.',
-    mitigation: 'Kill the process, but treat that as first aid: it is evidence of a compromise. Preserve the binary for analysis, find the entry point and any persistence (cron, systemd units, authorized_keys), and rebuild if in doubt. Prevent it with a default-deny host firewall, so an unapproved port is unreachable even if something listens on it.',
+    attack: [
+      'After gaining code execution, an attacker starts a listener to get back in later.',
+      'It mimics a kernel thread name (kworker) and runs from a hidden directory in /var/tmp.',
+    ],
+    detection: [
+      'Compare ss -tlnp against a baseline of approved ports.',
+      'Check the owner, start time and binary path of the process.',
+      'Real kernel threads show in [brackets] and have no binary path.',
+    ],
+    mitigation: [
+      'Kill the process, keep the binary as evidence, then find the entry point and any persistence.',
+      'Default-deny host firewall: an unapproved port stays unreachable.',
+    ],
     commands: [
-      { cmd: 'sudo ss -tlnp', explain: '-t TCP, -l listening, -n numeric ports, -p owning process (root needed to see other users\' processes)' },
-      { cmd: 'ps aux | grep www-data', explain: 'list every process with owner and full command line, filtered to one account' },
-      { cmd: 'cat /proc/3127/cmdline', explain: 'the kernel\'s own record of how a process was started' },
-      { cmd: 'sudo kill 3127', explain: 'send SIGTERM to exactly one PID; -9 (SIGKILL) only if it ignores that' },
+      { cmd: 'sudo ss -tlnp', explain: '-t TCP, -l listening, -n numeric, -p owning process (root sees all users)' },
+      { cmd: 'ps aux | grep www-data', explain: 'all processes with owner and command line, filtered to one account' },
+      { cmd: 'cat /proc/3127/cmdline', explain: 'how the process was started, straight from the kernel' },
+      { cmd: 'sudo kill 3127', explain: 'SIGTERM to one PID; use -9 only if it ignores that' },
     ],
   },
   idealSolution: ['sudo ss -tlnp', `sudo kill ${ROGUE_PID}`],

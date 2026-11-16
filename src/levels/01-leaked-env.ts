@@ -11,14 +11,11 @@ export const leakedEnv: Level = {
   id: 'leaked-env',
   title: 'The Leaked .env',
   story: text(`
-    Ticket SEC-1042, 08:47. An external scanner reports that the shop site on web01 answers
-    HTTP 200 for a dotfile that should never be reachable from the internet. Dotfiles like
-    .env hold an application's secrets: database passwords, API keys, cloud credentials.
-    If one sits inside the directory the web server publishes, anyone can download it.
-
-    The web sites live under /var/www. Find the exposed file before someone else does.
+    Ticket SEC-1042: a scanner got HTTP 200 for a dotfile on the shop site.
+    A .env file holds an app's secrets. Inside the web root, anyone can download it.
+    Sites live under /var/www.
   `),
-  objective: 'Find the .env file exposed under /var/www and submit the AWS access key ID it leaks (submit <key-id>).',
+  objective: 'Find the exposed .env under /var/www and submit its AWS access key ID.',
   now: NOW,
   initialFS: [
     ...baseFiles(NOW),
@@ -62,19 +59,30 @@ export const leakedEnv: Level = {
   initialProcesses: baseProcs(),
   goalCheck: (s) => lastAnswer(s) === KEY_ID,
   hints: [
-    'Files whose names start with a dot are hidden from a plain `ls`. You need a tool that searches a whole directory tree by name, or one that searches file contents.',
-    'Either search by name with `find /var/www -name ".env"`, or by content with `grep -r AWS_ACCESS_KEY_ID /var/www`. Ignore the `.env.example` templates: they hold placeholders.',
-    'Run `cat /var/www/shop/public/.env`, copy the value of AWS_ACCESS_KEY_ID, and `submit` it.',
+    'Dotfiles are hidden from plain `ls`. Search the tree by name or by content.',
+    '`find /var/www -name ".env"` or `grep -r AWS_ACCESS_KEY_ID /var/www`. Skip `.env.example` files: they hold placeholders.',
+    '`cat /var/www/shop/public/.env`, then `submit` the AWS_ACCESS_KEY_ID value.',
   ],
   conceptCard: {
-    attack: 'Secrets exposure. Frameworks read credentials from a .env file. If it is deployed inside the web root (or committed to git), anyone can fetch it with a single HTTP request. Attackers scan the whole internet for /.env continuously, then use the cloud keys they find to steal data or run up bills.',
-    detection: 'Search for stray secret files by name (find -name ".env") and for secret-shaped strings by content (grep -r for AKIA, PASSWORD=, BEGIN PRIVATE KEY). Web access logs show the scanners: requests for /.env, /.git/config, /backup.zip. Tools such as gitleaks and trufflehog automate the content search.',
-    mitigation: 'Keep secrets outside the served directory and block dotfiles in the web server config. Better: do not keep long-lived keys in files at all; use a secrets manager or short-lived role credentials. When a key leaks, rotating it is the only fix. Deleting the file does not un-leak it.',
+    attack: [
+      'A .env file deployed inside the web root is one HTTP request away from anyone.',
+      'Bots request /.env on every site they find and use leaked cloud keys within minutes.',
+    ],
+    detection: [
+      'By name: find -name ".env" across served directories.',
+      'By content: grep -r for AKIA, PASSWORD=, BEGIN PRIVATE KEY.',
+      'In access logs: requests for /.env or /.git/config.',
+    ],
+    mitigation: [
+      'Rotate the leaked key. Deleting the file does not un-leak it.',
+      'Keep secrets outside the web root and deny dotfiles in the server config.',
+      'Prefer a secrets manager or short-lived role credentials over key files.',
+    ],
     commands: [
-      { cmd: 'find /var/www -name ".env"', explain: 'walk a directory tree and match file names; the quotes stop the shell expanding the pattern' },
-      { cmd: 'ls -la /var/www/shop/public', explain: '-a reveals dotfiles, -l shows who can read them' },
-      { cmd: 'grep -r AWS_ACCESS_KEY_ID /var/www', explain: 'search file contents recursively when you know what the secret looks like' },
-      { cmd: 'cat /var/www/shop/public/.env', explain: 'read the file to see exactly what was exposed' },
+      { cmd: 'find /var/www -name ".env"', explain: 'match file names in a tree; quotes stop the shell expanding the pattern' },
+      { cmd: 'ls -la /var/www/shop/public', explain: '-a shows dotfiles, -l shows who can read them' },
+      { cmd: 'grep -r AWS_ACCESS_KEY_ID /var/www', explain: 'search file contents recursively' },
+      { cmd: 'cat /var/www/shop/public/.env', explain: 'see exactly what was exposed' },
     ],
   },
   idealSolution: ['find /var/www -name ".env"', 'cat /var/www/shop/public/.env', `submit ${KEY_ID}`],

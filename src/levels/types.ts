@@ -13,12 +13,12 @@ export interface FileSpec {
 }
 
 export interface ConceptCard {
-  /** what the attack / weakness is */
-  attack: string;
+  /** what the attack / weakness is: short bullet points */
+  attack: string[];
   /** how defenders detect it */
-  detection: string;
+  detection: string[];
   /** the real-world mitigation */
-  mitigation: string;
+  mitigation: string[];
   /** the exact commands used, each with a one-line explanation */
   commands: { cmd: string; explain: string }[];
 }

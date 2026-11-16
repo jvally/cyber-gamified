@@ -9,15 +9,11 @@ export const privateKey: Level = {
   id: 'private-key',
   title: 'Too Many Eyes on the Key',
   story: text(`
-    You try to hop from web01 to the database server and SSH refuses to use your key.
-    The error is saved in ~/ssh-error.txt. SSH is protecting you here: a private key that
-    other accounts on the machine can read is as good as stolen, so the client will not
-    touch it until the permissions are fixed.
-
-    web01 is a shared box. Any other local user (or a compromised service account such as
-    www-data) could copy the key as it stands.
+    SSH refuses your key for db01. The error is in ~/ssh-error.txt.
+    The key is readable by every account on this shared host, including service accounts such as www-data.
+    A readable private key can be copied and used.
   `),
-  objective: 'Change the permissions of ~/.ssh/id_ed25519 so that only its owner can access it.',
+  objective: 'Make ~/.ssh/id_ed25519 accessible only by its owner.',
   now: NOW,
   initialFS: [
     ...baseFiles(NOW),
@@ -48,20 +44,31 @@ export const privateKey: Level = {
     return !!n && n.type === 'file' && n.owner === 'analyst' && (n.mode & 0o077) === 0 && (n.mode & 0o400) !== 0;
   },
   failCheck: (s) => (s.vfs.tryGet(KEY)?.type === 'file' ? null
-    : 'The private key is gone. Without it you cannot log in to db01 at all; tightening permissions never requires deleting the file.'),
+    : 'The private key is gone. Fixing permissions never requires deleting the file.'),
   hints: [
-    'Look at the key with `ls -l ~/.ssh`. The first column shows three permission groups: owner, group, others. Which of them can read the private key right now?',
-    '`chmod` changes permissions. A private key should be readable and writable by its owner and nobody else: rw------- which is 600 in octal (4=read, 2=write, per digit: owner, group, others).',
-    'Run `chmod 600 ~/.ssh/id_ed25519` (or the symbolic form `chmod go-rwx ~/.ssh/id_ed25519`).',
+    '`ls -l ~/.ssh` shows three permission groups: owner, group, others. Check who can read the key.',
+    '`chmod` changes permissions. A private key should be rw------- (600): 4=read, 2=write, one digit each for owner, group, others.',
+    '`chmod 600 ~/.ssh/id_ed25519` or `chmod go-rwx ~/.ssh/id_ed25519`.',
   ],
   conceptCard: {
-    attack: 'Credential theft through weak file permissions. A private key readable by "group" or "others" can be copied by any local account, including a service account an attacker has taken over through a web bug. With the key they can log in wherever you can, and nothing looks unusual in the logs.',
-    detection: 'ls -l shows the mode: anything other than -rw------- (or -r--------) on a private key is a finding. At scale, find / -name "id_*" -perm /077 lists keys that group or others can touch. The SSH client itself refuses to use such a key, which is often how people first notice.',
-    mitigation: 'chmod 600 on private keys and 700 on ~/.ssh. Protect keys with a passphrase and an agent, prefer hardware-backed keys, and rotate any key that was exposed: once it could have been copied, tightening permissions does not make it secret again.',
+    attack: [
+      'A private key readable by group or others can be copied by any local account.',
+      'Logins with a stolen key look legitimate in the logs.',
+    ],
+    detection: [
+      'ls -l: anything but -rw------- or -r-------- on a private key is a finding.',
+      'At scale: find / -name "id_*" -perm /077.',
+      'The SSH client refuses over-permissive keys.',
+    ],
+    mitigation: [
+      'chmod 600 on private keys, 700 on ~/.ssh.',
+      'Rotate an exposed key: tightening permissions does not make it secret again.',
+      'Add a passphrase; prefer hardware-backed keys.',
+    ],
     commands: [
-      { cmd: 'ls -l ~/.ssh', explain: 'read the mode string: -rw-r--r-- means owner rw, group r, others r' },
-      { cmd: 'chmod 600 ~/.ssh/id_ed25519', explain: 'octal form: 6 = rw for the owner, 0 for group, 0 for others' },
-      { cmd: 'chmod go-rwx ~/.ssh/id_ed25519', explain: 'symbolic form: remove every permission from group and others' },
+      { cmd: 'ls -l ~/.ssh', explain: '-rw-r--r-- means owner rw, group r, others r' },
+      { cmd: 'chmod 600 ~/.ssh/id_ed25519', explain: 'octal: 6 = rw for owner, 0 for group, 0 for others' },
+      { cmd: 'chmod go-rwx ~/.ssh/id_ed25519', explain: 'symbolic: remove all access from group and others' },
     ],
   },
   idealSolution: ['ls -l ~/.ssh', 'chmod 600 ~/.ssh/id_ed25519'],

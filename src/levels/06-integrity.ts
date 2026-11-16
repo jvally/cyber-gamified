@@ -56,15 +56,11 @@ export const integrity: Level = {
   id: 'integrity',
   title: 'Trust, but Verify',
   story: text(`
-    After yesterday's backdoor, nobody trusts web01. The operations scripts in
-    /usr/local/bin run as root from cron and monitoring, which makes them a perfect hiding
-    place: change one line and your code runs with full privileges forever.
-
-    Luckily a baseline exists. On the day the server was built, a SHA-256 checksum of every
-    script was recorded in /opt/baseline/SHA256SUMS. A file whose hash no longer matches
-    has been modified. Timestamps and sizes can be faked; a cryptographic hash cannot.
+    Scripts in /usr/local/bin run as root from cron. One changed line there runs with full privileges.
+    /opt/baseline/SHA256SUMS holds each script's SHA-256 hash from build day.
+    A changed file has a different hash. Timestamps and sizes can be faked.
   `),
-  objective: 'Find the script in /usr/local/bin whose contents no longer match the baseline and submit its file name (submit <name>).',
+  objective: 'Submit the name of the script in /usr/local/bin that no longer matches the baseline.',
   now: NOW,
   initialFS: [
     ...baseFiles(NOW),
@@ -79,18 +75,29 @@ export const integrity: Level = {
     return a === TAMPERED || a === `${BIN}/${TAMPERED}`;
   },
   hints: [
-    'Do not trust `ls -l`: the newest file is not the modified one. `sha256sum` computes a fingerprint of a file\'s contents; the baseline file lists the fingerprints the scripts should have.',
-    '`sha256sum` has a check mode: give it a checksum list with `-c` and it re-hashes every file named in the list and reports OK or FAILED for each.',
-    'Run `sha256sum -c /opt/baseline/SHA256SUMS`, then submit the name of the file marked FAILED.',
+    '`ls -l` misleads here: the newest file is not the modified one. Compare content hashes with `sha256sum`.',
+    '`sha256sum -c LIST` re-hashes every file named in LIST and prints OK or FAILED.',
+    '`sha256sum -c /opt/baseline/SHA256SUMS`, then submit the file marked FAILED.',
   ],
   conceptCard: {
-    attack: 'Tampering with trusted files (trojanised scripts or binaries). Instead of adding something new and obvious, an attacker edits a file that already runs with privileges, then resets its modification time ("timestomping") so a directory listing looks normal. The change survives reboots and password resets.',
-    detection: 'File integrity monitoring: record cryptographic hashes of important files while the system is known to be good, store them where an attacker cannot rewrite them, and compare later. sha256sum -c does exactly this. Any change to the content, even one byte, produces a completely different hash. Tools such as AIDE, Tripwire and Wazuh automate it; package managers can verify their own files (dpkg --verify, rpm -V).',
-    mitigation: 'Restore the file from a trusted source rather than hand-editing it, and investigate how it was changed. Keep baselines off the host or signed, make system directories writable only by root, deploy from version control so drift is visible, and alert on integrity failures instead of checking only after an incident.',
+    attack: [
+      'Editing a script that already runs as root gives persistent privileged execution.',
+      'Resetting the modification time ("timestomping") hides the change from ls.',
+    ],
+    detection: [
+      'Record hashes while the system is known good; compare later with sha256sum -c.',
+      'One changed byte gives a completely different hash.',
+      'AIDE, Tripwire and Wazuh automate this; dpkg --verify checks packaged files.',
+    ],
+    mitigation: [
+      'Restore from a trusted source instead of hand-editing.',
+      'Keep the baseline off the host or signed.',
+      'Deploy from version control so drift is visible.',
+    ],
     commands: [
-      { cmd: 'sha256sum -c /opt/baseline/SHA256SUMS', explain: 're-hash each listed file and compare with the recorded value: OK or FAILED' },
-      { cmd: 'sha256sum /usr/local/bin/*', explain: 'compute current hashes yourself, to compare with the baseline by hand' },
-      { cmd: 'cat now.txt baseline.txt | sort | uniq -u', explain: 'lines that appear only once are the ones that differ between two lists' },
+      { cmd: 'sha256sum -c /opt/baseline/SHA256SUMS', explain: 're-hash each listed file and compare: OK or FAILED' },
+      { cmd: 'sha256sum /usr/local/bin/*', explain: 'compute current hashes to compare by hand' },
+      { cmd: 'cat now.txt baseline.txt | sort | uniq -u', explain: 'lines that appear once are the ones that differ' },
     ],
   },
   idealSolution: ['sha256sum -c /opt/baseline/SHA256SUMS', `submit ${TAMPERED}`],

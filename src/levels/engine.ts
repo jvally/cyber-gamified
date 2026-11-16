@@ -75,7 +75,7 @@ export class Game {
     const base = { justWon: false, justFailed: false, wrongAnswer: false };
     if (line.trim() === '') return { output: '', code: 0, status: this.status, ...base };
     if (this.status === 'failed' && !meta) {
-      return { output: 'This level is in a failed state. Type `reset` to start it again.\n', code: 1, status: this.status, ...base };
+      return { output: 'Level is in a failed state. Type `reset`.\n', code: 1, status: this.status, ...base };
     }
     const before = this.state.submitted.length;
     const res = this.shell.run(line, opts);

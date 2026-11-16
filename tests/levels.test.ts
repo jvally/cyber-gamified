@@ -19,12 +19,20 @@ describe('level catalogue', () => {
 describe.each(LEVELS.map((l) => [l.id, l] as const))('level %s', (_id, level) => {
   it('is structurally complete', () => {
     for (const s of [level.title, level.story, level.objective]) expect(s.trim().length).toBeGreaterThan(10);
+    // keep the copy short: these limits stop the text creeping back into paragraphs
+    expect(level.story.length).toBeLessThanOrEqual(320);
+    expect(level.objective.length).toBeLessThanOrEqual(110);
+    level.hints.forEach((h) => expect(h.length).toBeLessThanOrEqual(190));
     expect(level.hints).toHaveLength(3);
     level.hints.forEach((h) => expect(h.length).toBeGreaterThan(20));
     const c = level.conceptCard;
-    for (const s of [c.attack, c.detection, c.mitigation]) expect(s.length).toBeGreaterThan(80);
+    for (const points of [c.attack, c.detection, c.mitigation]) {
+      expect(points.length).toBeGreaterThanOrEqual(2);
+      expect(points.length).toBeLessThanOrEqual(3);
+      points.forEach((p) => { expect(p.length).toBeGreaterThan(20); expect(p.length).toBeLessThanOrEqual(110); });
+    }
     expect(c.commands.length).toBeGreaterThanOrEqual(2);
-    c.commands.forEach((x) => { expect(x.cmd).not.toBe(''); expect(x.explain.length).toBeGreaterThan(10); });
+    c.commands.forEach((x) => { expect(x.cmd).not.toBe(''); expect(x.explain.length).toBeGreaterThan(10); expect(x.explain.length).toBeLessThanOrEqual(80); });
     expect(level.altSolutions.length, 'needs at least two valid solution paths').toBeGreaterThanOrEqual(1);
     expect(level.wrongSolutions?.length ?? 0).toBeGreaterThanOrEqual(1);
   });

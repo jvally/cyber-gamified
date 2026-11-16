@@ -43,7 +43,7 @@ export class App {
 
   constructor(root: HTMLElement, storage: Storage | null) {
     this.store = new ProgressStore(storage);
-    const termHost = h('div', { class: 'terminal', 'aria-label': 'Terminal' });
+    const termHost = h('div', { class: 'term-host', 'aria-label': 'Terminal' });
     root.append(
       h('header', { class: 'topbar' },
         h('h1', { 'aria-label': 'ShellShock Academy' }, h('span', { class: 'neon-cyan' }, 'ShellShock'), ' ', h('span', { class: 'neon-lime' }, 'Academy')),
@@ -91,7 +91,7 @@ export class App {
     this.term.write(
       `${BOLD}ShellShock Academy${OFF} ${DIM}·${OFF} Level ${index + 1}/${LEVELS.length}: ${BOLD}${level.title}${OFF}` +
       `${this.replay ? ` ${DIM}(replay)${OFF}` : ''}\n${YELLOW}Objective:${OFF} ${level.objective}\n` +
-      `${DIM}Type ${OFF}help${DIM} for commands, ${OFF}hint${DIM} for a hint, ${OFF}mission${DIM} for the briefing. Tab completes, ↑ recalls.${OFF}\n\n`,
+      `${DIM}Commands: ${OFF}help${DIM}, ${OFF}hint${DIM}, ${OFF}mission${DIM}. Tab completes, ↑ recalls history.${OFF}\n\n`,
     );
     this.cursorRow = this.endRow = 0;
     this.redraw();
@@ -197,14 +197,14 @@ export class App {
     const r = this.game.exec(line, { tty: true, cols: this.term.cols });
     let out = r.output;
     if (out !== '' && !out.endsWith('\n') && !out.endsWith('\x1b[3J')) out += '\n';
-    if (r.wrongAnswer) out += `${RED}✗ That is not the answer.${OFF} Keep investigating, or type ${BOLD}hint${OFF}.\n`;
-    if (r.justFailed) out += `${RED}✗ Level failed.${OFF} ${this.game.failMessage}\nType ${BOLD}reset${OFF} to try again.\n`;
+    if (r.wrongAnswer) out += `${RED}✗ Wrong answer.${OFF}\n`;
+    if (r.justFailed) out += `${RED}✗ Level failed.${OFF} ${this.game.failMessage} Type ${BOLD}reset${OFF}.\n`;
     if (r.justWon) {
       const score = this.game.score();
       const res = this.store.recordWin(level.id, score, this.game.commandCount, this.game.hintsUsed);
-      out += `${GREEN}✓ Objective complete!${OFF} Score ${BOLD}${score}${OFF}` +
+      out += `${GREEN}✓ Solved.${OFF} Score ${BOLD}${score}${OFF}` +
         `${res.firstClear ? '' : res.newBest ? ' (new best)' : ` (best stays ${this.store.get(level.id).bestScore})`}. ` +
-        `${DIM}The shell stays open if you want to keep exploring; type ${OFF}next${DIM} to move on.${OFF}\n`;
+        `Type ${BOLD}next${OFF} to continue.\n`;
       setTimeout(() => this.showCard(level, true), 350);
     }
     this.term.write(out);
@@ -229,18 +229,18 @@ export class App {
     this.panel.replaceChildren(
       h('p', { class: 'tag' }, `Level ${this.index + 1} of ${LEVELS.length}`, this.replay ? h('span', { class: 'badge' }, 'replay') : ''),
       h('h2', {}, level.title),
-      h('div', { class: 'story' }, ...level.story.trim().split(/\n\s*\n/).map((para) => h('p', {}, para.replace(/\s*\n\s*/g, ' ')))),
+      h('div', { class: 'story' }, ...level.story.trim().split(/\n+/).map((line) => h('p', {}, line.trim()))),
       h('div', { class: `objective ${won ? 'done' : game.status === 'failed' ? 'failed' : ''}` },
-        h('strong', {}, won ? '✓ Objective complete' : game.status === 'failed' ? '✗ Level failed: type reset' : 'Objective'),
+        h('strong', {}, won ? '✓ Solved' : game.status === 'failed' ? '✗ Failed: type reset' : 'Objective'),
         h('p', {}, level.objective)),
       h('h3', {}, 'Hints'),
-      game.hintsUsed ? hints : h('p', { class: 'muted' }, 'Three tiers: a nudge, an approach, then the commands. Each one costs points.'),
+      game.hintsUsed ? hints : h('p', { class: 'muted' }, 'Three hints: -10, -20, -30 points.'),
       hintBtn,
       h('h3', {}, 'Score'),
       h('dl', { class: 'stats' },
-        h('dt', {}, 'This run'), h('dd', {}, String(game.score())),
-        h('dt', {}, 'Commands'), h('dd', {}, `${game.commandCount} (bonus +${PAR_BONUS} at ${game.par} or fewer)`),
-        h('dt', {}, 'Best'), h('dd', {}, best.completed ? String(best.bestScore) : 'not yet completed'),
+        h('dt', {}, 'Score'), h('dd', {}, String(game.score())),
+        h('dt', {}, 'Commands'), h('dd', {}, `${game.commandCount} (+${PAR_BONUS} if ${game.par} or fewer)`),
+        h('dt', {}, 'Best'), h('dd', {}, best.completed ? String(best.bestScore) : '-'),
       ),
       h('div', { class: 'actions' },
         h('button', { class: 'btn', click: () => { this.term.write('\r\x1b[J' + this.resetLevel()); this.cursorRow = this.endRow = 0; this.redraw(); this.term.focus(); } }, 'Reset level'),
@@ -270,7 +270,8 @@ export class App {
     const card = level.conceptCard;
     const i = LEVELS.indexOf(level);
     const p = this.store.get(level.id);
-    const section = (title: string, body: string): HTMLElement => h('section', {}, h('h3', {}, title), h('p', {}, body));
+    const section = (title: string, points: string[]): HTMLElement =>
+      h('section', {}, h('h3', {}, title), h('ul', { class: 'points' }, ...points.map((t) => h('li', {}, t))));
     const hintCost = HINT_COSTS.slice(0, this.game.hintsUsed).reduce((a, b) => a + b, 0);
     const bonus = this.game.commandCount <= this.game.par;
     const go = (fn: () => void) => () => { this.closeModal(); fn(); };
@@ -280,14 +281,14 @@ export class App {
       justPlayed ? h('p', { class: 'scoreline' },
         `Score ${this.game.score()} = ${BASE_SCORE} base${hintCost ? ` - ${hintCost} hints` : ''}${bonus ? ` + ${PAR_BONUS} efficiency bonus` : ''}`,
         h('span', { class: 'muted' }, `  ·  best ${p.bestScore}  ·  ${this.game.commandCount} ${this.game.commandCount === 1 ? 'command' : 'commands'}`)) : '',
-      section('What the attack is', card.attack),
-      section('How defenders detect it', card.detection),
-      section('Real-world mitigation', card.mitigation),
-      h('section', {}, h('h3', {}, 'Commands used'),
+      section('Attack', card.attack),
+      section('Detection', card.detection),
+      section('Mitigation', card.mitigation),
+      h('section', {}, h('h3', {}, 'Commands'),
         h('dl', { class: 'cmds' }, ...card.commands.flatMap((c) => [h('dt', {}, h('code', {}, c.cmd)), h('dd', {}, c.explain)]))),
       h('section', { class: 'two-col' },
-        h('div', {}, h('h3', {}, 'One clean solution'), h('pre', {}, level.idealSolution.join('\n'))),
-        justPlayed ? h('div', {}, h('h3', {}, 'What you ran'), h('pre', {}, this.game.commands.join('\n') || '(nothing)')) : '',
+        h('div', {}, h('h3', {}, 'Reference solution'), h('pre', {}, level.idealSolution.join('\n'))),
+        justPlayed ? h('div', {}, h('h3', {}, 'Your commands'), h('pre', {}, this.game.commands.join('\n') || '(nothing)')) : '',
       ),
       h('div', { class: 'actions' },
         i + 1 < LEVELS.length && p.completed ? h('button', { class: 'btn primary', click: go(() => this.loadLevel(i + 1)) }, 'Next level') : '',
@@ -317,7 +318,7 @@ export class App {
     });
     this.openModal(
       h('h2', {}, 'Levels'),
-      h('p', { class: 'muted' }, `${this.store.completedCount(IDS)} of ${LEVELS.length} complete · ${this.store.totalScore(IDS)} points. Replays keep your best score.`),
+      h('p', { class: 'muted' }, `${this.store.completedCount(IDS)}/${LEVELS.length} complete · ${this.store.totalScore(IDS)} pts · replays keep your best score`),
       h('ol', { class: 'levels' }, ...rows),
       h('div', { class: 'actions' },
         h('button', { class: 'btn', click: () => this.closeModal() }, 'Close'),

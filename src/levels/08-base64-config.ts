@@ -17,15 +17,11 @@ export const base64Config: Level = {
   id: 'base64-config',
   title: 'Hidden in Plain Sight',
   story: text(`
-    Last stop. The firewall logs show web01 making a small outbound HTTPS request every five
-    minutes. The process responsible calls itself a "telemetry agent" and reads its settings
-    from /opt/telemetry/agent.conf, but nobody on the team installed it.
-
-    The config does not say where it connects: some values are a jumble of letters and
-    digits. That is base64, a way of writing arbitrary bytes as text. It is used to dodge
-    simple keyword searches, not to keep secrets: it has no key, and anyone can reverse it.
+    web01 makes an outbound HTTPS request every five minutes.
+    The process reads /opt/telemetry/agent.conf, and nobody installed it.
+    Some values are base64: an encoding with no key, so anyone can reverse it.
   `),
-  objective: 'Decode the obfuscated endpoint in /opt/telemetry/agent.conf and submit the host name the agent connects to (submit <host>).',
+  objective: 'Decode the endpoint in /opt/telemetry/agent.conf and submit the host name it contacts.',
   now: NOW,
   initialFS: [
     ...baseFiles(NOW),
@@ -46,19 +42,30 @@ export const base64Config: Level = {
   ],
   goalCheck: (s) => hostOf(lastAnswer(s) ?? '') === HOST,
   hints: [
-    'Read the config with `cat`. Values that use only A-Z, a-z, 0-9, + and / (sometimes ending in =) are almost certainly base64. There is a command named after the encoding.',
-    '`base64 -d` decodes whatever arrives on its standard input, so you need to feed it just the encoded value, not the whole line. `echo <value> | base64 -d` works; so does cutting the value out of the file with `cut -d= -f2-`.',
-    `Run \`grep endpoint_b64 ${CONF} | cut -d= -f2- | base64 -d\` and submit the host name from the URL it prints.`,
+    'Values made only of A-Z, a-z, 0-9, + and / (often ending in =) are probably base64.',
+    '`base64 -d` decodes standard input. Feed it only the value: `echo VALUE | base64 -d`, or cut it out with `cut -d= -f2-`.',
+    `\`grep endpoint_b64 ${CONF} | cut -d= -f2- | base64 -d\`, then submit the host name from the URL.`,
   ],
   conceptCard: {
-    attack: 'Obfuscation of command-and-control (C2) details. Malware has to know where to phone home, and defenders search disks for URLs and domains. Encoding the address as base64 (often layered with XOR or compression) defeats naive string searches and casual inspection while costing the attacker nothing.',
-    detection: 'Recognise the alphabet: long runs of A-Za-z0-9+/ with optional = padding, a length that is a multiple of four. Decode and look. Decoded text that is a URL, a shell command or a script is a strong signal. Scanners flag high-entropy strings and base64 that decodes to keywords such as http, /bin/sh or powershell. Pair this with network evidence: regular, small outbound requests on a fixed interval ("beaconing").',
-    mitigation: 'Block the decoded host at DNS and the egress firewall and search the rest of the fleet for the same indicator. Remove the implant and its persistence, then rebuild if its origin is unknown. Longer term: default-deny outbound traffic from servers, so an implant cannot reach a host nobody approved, and alert on new binaries and services.',
+    attack: [
+      'Malware encodes its command-and-control address so string searches miss it.',
+      'Base64 is free to apply and is often layered with XOR or compression.',
+    ],
+    detection: [
+      'Spot the alphabet: A-Za-z0-9+/ with = padding, length a multiple of four.',
+      'Decode it: a URL, shell command or script is a strong signal.',
+      'Network side: small outbound requests at a fixed interval (beaconing).',
+    ],
+    mitigation: [
+      'Block the host at DNS and the egress firewall; search other hosts for it.',
+      'Remove the implant and its persistence.',
+      'Default-deny outbound traffic from servers.',
+    ],
     commands: [
-      { cmd: `cat ${CONF}`, explain: 'read the file and spot which values look encoded' },
-      { cmd: 'cut -d= -f2-', explain: 'split on "=" and keep everything from field 2 on; the trailing "-" matters because base64 padding is also "="' },
-      { cmd: 'base64 -d', explain: 'decode base64 from standard input (or a file)' },
-      { cmd: `echo ${ENDPOINT_B64} | base64 -d`, explain: 'the quick way for a value you can copy and paste' },
+      { cmd: `cat ${CONF}`, explain: 'spot which values look encoded' },
+      { cmd: 'cut -d= -f2-', explain: 'keep everything after the first "="; the trailing "-" keeps base64 padding' },
+      { cmd: 'base64 -d', explain: 'decode base64 from standard input or a file' },
+      { cmd: `echo ${ENDPOINT_B64} | base64 -d`, explain: 'quick way for a value you can paste' },
     ],
   },
   idealSolution: [`cat ${CONF}`, `grep endpoint_b64 ${CONF} | cut -d= -f2- | base64 -d`, `submit ${HOST}`],
