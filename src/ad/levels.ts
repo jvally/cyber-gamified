@@ -17,7 +17,7 @@ const accountRecovery: AdLevel = {
     'The attacker knows her current password.',
     'You are a domain admin on MGMT01.',
   ].join('\n'),
-  objective: 'Secure mlopez: reset the password, require a change at next logon, and unlock the account.',
+  objective: 'Secure mlopez: reset the password, force a change at next logon, unlock the account.',
   now: NOW,
   setup: (d) => { const u = d.findUser('mlopez')!; u.lockedOut = true; u.lastLogon = NOW - 7200; },
   goalCheck: (s) => { const u = user(s, 'mlopez'); return u.pwdResets >= 1 && u.mustChange && !u.lockedOut && u.enabled; },
